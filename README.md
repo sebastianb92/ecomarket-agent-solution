@@ -7,6 +7,9 @@
 **Integrantes:** Johan Sebastian Bonilla · Edwin Gómez
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/sebastianb92/ecomarket-agent-solution/blob/main/notebooks/EcoMarket_Agent_Solution.ipynb)
+![Python](https://img.shields.io/badge/Python-3.10+-blue)
+![LangChain](https://img.shields.io/badge/LangChain-RAG-green)
+![LLM](https://img.shields.io/badge/LLM-LLaMA_3.3_70B-orange)
 
 ---
 
@@ -90,42 +93,6 @@ Encapsula la cadena RAG del Taller 2. Responde preguntas generales sobre políti
 
 ---
 
-## Instalación y Uso
-
-### Opción 1 — Google Colab (recomendado)
-
-Haz clic en el badge **Open in Colab** al inicio de este README. Solo necesitas configurar tu API key de Groq en los Secrets de Colab:
-
-```
-Colab → Ícono de llave (🔑) → Agregar secreto
-Nombre: GROQ_API_KEY
-Valor:  tu_api_key_aquí
-```
-
-### Opción 2 — Local
-
-```bash
-# 1. Clonar el repositorio
-git clone https://github.com/sebastianb92/ecomarket-agent-solution.git
-cd ecomarket-agent-solution
-
-# 2. Instalar dependencias
-pip install -r requirements.txt
-
-# 3. Configurar variable de entorno
-echo "GROQ_API_KEY=tu_api_key_aquí" > .env
-
-# 4. Abrir el notebook
-jupyter notebook notebooks/EcoMarket_Agent_Solution.ipynb
-```
-
-### Obtener API Key de Groq
-
-1. Regístrate en [console.groq.com](https://console.groq.com)
-2. Ve a **API Keys** → **Create API Key**
-3. Copia la key generada
-
----
 
 ## Escenarios de Prueba
 
