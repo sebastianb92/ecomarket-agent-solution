@@ -146,6 +146,8 @@ Este proyecto es una extensión directa del repositorio [`ecomarket-solution`](h
 
 ---
 
-## Licencia
+## Autores
 
-Proyecto académico — Maestría en Inteligencia Artificial, Universidad Icesi.
+* Johan Sebastian Bonilla
+
+* Edwin Gómez
