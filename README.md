@@ -8,36 +8,40 @@
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/sebastianb92/ecomarket-agent-solution/blob/main/notebooks/EcoMarket_Agent_Solution.ipynb)
 ![Python](https://img.shields.io/badge/Python-3.10+-blue)
-![LangChain](https://img.shields.io/badge/LangChain-RAG-green)
+![LangChain](https://img.shields.io/badge/LangChain-Agents-green)
 ![LLM](https://img.shields.io/badge/LLM-LLaMA_3.3_70B-orange)
 
 ---
 
 ## Descripción
 
-Este proyecto extiende la arquitectura RAG del Taller Práctico #2 incorporando un **Agente de IA** capaz de ejecutar acciones autónomas sobre el sistema de EcoMarket.
+Este proyecto extiende la arquitectura RAG del Taller Práctico #2 incorporando un **Agente de IA** capaz de ejecutar acciones autónomas sobre el sistema de EcoMarket. La tarea automatizada es el proceso completo de devolución de productos.
 
-A diferencia del sistema RAG anterior (puramente consultivo), este agente puede:
+El agente puede:
 
-- **Verificar** si un pedido es elegible para devolución consultando el sistema en tiempo real.
-- **Generar** una etiqueta de devolución con número de autorización RMA y fecha límite de envío.
-- **Responder** consultas generales usando la cadena RAG del Taller 2 como herramienta adicional.
+- **Consultar** estado de pedidos: tracking, retrasos, cancelaciones.
+- **Verificar** si un pedido es elegible para devolución (reglas deterministas: estado, categoría, plazo, daños).
+- **Generar** una etiqueta de devolución con código único, transportista y fecha límite.
+- **Responder** consultas generales usando la cadena RAG del Taller 2 (RetrievalQA + ChromaDB).
 
-El agente implementa un patrón **Router**: analiza la intención del usuario y decide qué herramienta invocar en cada caso.
+El agente implementa un patrón **Router** con 4 herramientas y un sistema de **action logging** para monitoreo y auditoría.
 
 ---
 
 ## Arquitectura
 
 ```
-Usuario (Gradio)
+Usuario (Gradio / Streamlit)
       │
       ▼
-Agente LangChain (create_agent)
+Agente LangChain (create_agent — ReAct loop)
       │
-      ├── verificar_elegibilidad_devolucion()  →  Excel en tiempo real
-      ├── generar_etiqueta_devolucion()        →  Genera RMA simulado
-      └── consultar_base_conocimiento()        →  RAG (ChromaDB + LLM)
+      ├── consultar_estado_pedido()             →  DataFrame en tiempo real
+      ├── verificar_elegibilidad_devolucion()   →  Reglas deterministas + DataFrame
+      ├── generar_etiqueta_devolucion()         →  Código único + fecha límite
+      └── consultar_base_conocimiento()         →  RAG (RetrievalQA + ChromaDB + LLM)
+      │
+      └── _registrar_accion()                   →  logs/agent_actions.jsonl
 ```
 
 ---
@@ -46,20 +50,21 @@ Agente LangChain (create_agent)
 
 | Componente | Librería / Modelo |
 |---|---|
-| Agente | `langchain.agents.create_agent` |
+| Agente | `langchain.agents.create_agent` (LangGraph) |
 | Herramientas | `langchain_core.tools.tool` |
 | LLM | `llama-3.3-70b-versatile` via Groq API |
 | Embeddings | `intfloat/multilingual-e5-large` (HuggingFace, CPU) |
 | Vector Store | ChromaDB via `langchain_chroma` |
 | Cadena RAG | `langchain_classic.chains.RetrievalQA` |
-| Interfaz | Gradio `gr.Blocks` |
+| Interfaz Notebook | Gradio `gr.ChatInterface` |
+| Interfaz Producción | Streamlit (app.py) |
 
 ---
 
 ## Estructura del Repositorio
 
 ```
-ecomarket-agent-solution/
+ecomarket-agent-solution-plus/
 │
 ├── data/
 │   ├── FAQ.json
@@ -70,9 +75,12 @@ ecomarket-agent-solution/
 │   └── Proyecto_Final_EcoMarket.md     ← Fases 1 y 3 (diseño + análisis crítico)
 │
 ├── notebooks/
-│   └── EcoMarket_Agent_Solution.ipynb  ← Fases 2 y 4 (código + interfaz)
+│   └── EcoMarket_Agent_Solution.ipynb  ← Fases 2 y 4 (código + interfaz Gradio)
 │
+├── app.py                              ← Interfaz Streamlit (producción)
 ├── requirements.txt
+├── .env.example
+├── .gitignore
 └── README.md
 ```
 
@@ -80,74 +88,82 @@ ecomarket-agent-solution/
 
 ## Herramientas del Agente
 
-### `verificar_elegibilidad_devolucion(pedido_id)`
-Consulta el DataFrame de pedidos en tiempo real y aplica reglas **deterministas** de elegibilidad basadas en la política oficial de EcoMarket. La decisión no depende del LLM, lo que garantiza consistencia y previene alucinaciones.
+### `consultar_estado_pedido(numero_pedido)`
+Consulta el DataFrame en tiempo real para obtener toda la información disponible de un pedido (estado, tracking, fechas, producto, cliente).
 
-Estados elegibles: `ENTREGADO`, `LISTO PARA RECOGIDA`
+### `verificar_elegibilidad_devolucion(pedido_id, motivo)`
+Aplica reglas **deterministas** de elegibilidad en este orden:
+1. Estado del pedido (solo ENTREGADO y LISTO PARA RECOGIDA son elegibles)
+2. Daño en tránsito (aprobación automática con compensación)
+3. Categoría del producto (higiene y perecederos no elegibles)
+4. Plazo de 30 días desde entrega
 
 ### `generar_etiqueta_devolucion(pedido_id)`
-Genera una etiqueta de devolución simulada con número de autorización RMA único, fecha límite de envío (10 días hábiles) y centro de devolución asignado según el transportista. Verifica internamente la elegibilidad antes de proceder.
+Genera etiqueta de devolución con código único, fecha límite (14 días) y transportista según tipo de devolución. **Verifica internamente** que exista una devolución aprobada previamente.
 
 ### `consultar_base_conocimiento(pregunta)`
-Encapsula la cadena RAG del Taller 2. Responde preguntas generales sobre política de devoluciones, FAQ y estado de pedidos sin intención de devolución.
-
----
-
-
-## Escenarios de Prueba
-
-El notebook incluye 7 pruebas que cubren los casos principales:
-
-| # | Escenario | Herramientas invocadas |
-|---|---|---|
-| 1 | Devolución con pedido **ELEGIBLE** | `verificar` → `generar_etiqueta` |
-| 2 | Devolución con pedido **EN TRÁNSITO** | `verificar` |
-| 3 | Devolución con pedido **CANCELADO** | `verificar` |
-| 4 | Consulta general de política | `consultar_base_conocimiento` |
-| 5 | Estado de pedido sin devolución | `consultar_base_conocimiento` |
-| 6 | Pedido **inexistente** | `verificar` |
-| 7 | Consulta fuera de dominio | `consultar_base_conocimiento` |
+Encapsula la cadena RAG del Taller 2 (RetrievalQA). Responde preguntas generales sobre política de devoluciones, FAQ y estado de pedidos.
 
 ---
 
 ## Monitoreo
 
-Cada invocación de herramienta queda registrada en `logs/agent_actions.jsonl` con el siguiente formato:
+Cada invocación de herramienta queda registrada en `logs/agent_actions.jsonl`:
 
 ```json
 {
   "timestamp": "2024-07-05T14:32:11.204",
   "session_id": "a3f9b21c",
   "herramienta": "verificar_elegibilidad_devolucion",
-  "input": {"pedido_id": "ECO-12347"},
-  "output": {"elegible": true, "estado": "ENTREGADO", ...}
+  "input": {"pedido_id": "ECO-12347", "motivo": "no me gusta el tamaño"},
+  "output": {"elegible": true, "estado": "ENTREGADO"}
 }
+```
+
+---
+
+## Escenarios de Prueba
+
+| # | Escenario | Herramientas invocadas |
+|---|---|---|
+| 1 | Estado de pedido (tracking) | `consultar_estado_pedido` |
+| 2 | Devolución ELEGIBLE (flujo completo) | `verificar` → `generar_etiqueta` |
+| 3 | Devolución NO ELEGIBLE (en tránsito) | `verificar` |
+| 4 | Devolución CANCELADO | `verificar` |
+| 5 | Devolución por DAÑO (compensación) | `verificar` → `generar_etiqueta` |
+| 6 | Consulta general de política | `consultar_base_conocimiento` |
+| 7 | Pedido inexistente | `verificar` |
+| 8 | Fuera de dominio | Ninguna |
+| 9 | Bypass: etiqueta sin verificar | `generar_etiqueta` (falla) |
+
+---
+
+## Ejecución
+
+### Notebook (Gradio)
+```bash
+# Ejecutar en Jupyter o Colab
+jupyter notebook notebooks/EcoMarket_Agent_Solution.ipynb
+```
+
+### Streamlit (producción)
+```bash
+cp .env.example .env  # Configura tus API keys
+pip install -r requirements.txt
+streamlit run app.py
 ```
 
 ---
 
 ## Documentación
 
-El archivo `docs/Proyecto_Final_EcoMarket.md` contiene:
-
-- **Fase 1:** Diseño de arquitectura, definición de herramientas, justificación de LangChain y diagrama de flujo del agente.
-- **Fase 3:** Análisis de riesgos éticos y de seguridad, sistema de monitoreo en tres capas y propuestas de mejora.
-
----
-
-## Relación con el Taller 2
-
-Este proyecto es una extensión directa del repositorio [`ecomarket-solution`](https://github.com/sebastianb92/ecomarket-solution). Se reutilizan sin modificación:
-
-- El LLM (`ChatGroq` con `llama-3.3-70b-versatile`)
-- Los embeddings (`multilingual-e5-large`)
-- El vector store (ChromaDB)
-- La cadena RAG (`RetrievalQA`) — ahora como Herramienta 3 del agente
+`docs/Proyecto_Final_EcoMarket.md` contiene:
+- **Fase 1:** Diseño de arquitectura, 4 herramientas, justificación de LangChain, diagrama de flujo.
+- **Fase 3:** Matriz de 6 riesgos de seguridad/ética, sistema de monitoreo en 3 capas, 5 propuestas de mejora.
 
 ---
 
 ## Autores
 
 * Johan Sebastian Bonilla
-
 * Edwin Gómez
